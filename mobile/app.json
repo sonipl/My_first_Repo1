@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Tesla Daily Tracker",
+    "slug": "tesla-daily-tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "teslatracker",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tesladailytracker.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0a0a0a"
+      },
+      "package": "com.tesladailytracker.app"
+    },
+    "plugins": ["expo-router"],
+    "extra": {
+      "apiUrl": "http://localhost:8000"
+    }
+  }
+}
