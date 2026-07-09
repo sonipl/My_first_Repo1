@@ -1,0 +1,17 @@
+# Append these blocks to C:\Users\<YOU>\.ssh\config
+
+Host ac01
+    HostName 192.168.68.26
+    User psoni
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+    TCPKeepAlive yes
+
+Host vcenter-tunnel
+    HostName 192.168.68.26
+    User psoni
+    LocalForward 8443 vc01.vmalpha.com:443
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+    TCPKeepAlive yes
+    ExitOnForwardFailure yes
