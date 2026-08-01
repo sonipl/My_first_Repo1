@@ -1,14 +1,27 @@
 # Append these blocks to C:\Users\<YOU>\.ssh\config
+# LocalForward 443 requires Administrator (or capability) when binding privileged ports.
+# Prefer LocalForward 8443 if you open https://localhost:8443 instead of the FQDN.
 
 Host ac01
-    HostName 192.168.68.26
+    HostName 192.168.71.26
     User psoni
     ServerAliveInterval 30
     ServerAliveCountMax 3
     TCPKeepAlive yes
 
+# FQDN-friendly tunnel: https://vc01.vmalpha.com/ with hosts → 127.0.0.1
 Host vcenter-tunnel
-    HostName 192.168.68.26
+    HostName 192.168.71.26
+    User psoni
+    LocalForward 443 vc01.vmalpha.com:443
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+    TCPKeepAlive yes
+    ExitOnForwardFailure yes
+
+# Alternate: https://localhost:8443 (no admin / no hosts change needed)
+Host vcenter-tunnel-8443
+    HostName 192.168.71.26
     User psoni
     LocalForward 8443 vc01.vmalpha.com:443
     ServerAliveInterval 30

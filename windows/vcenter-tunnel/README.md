@@ -1,22 +1,59 @@
-# vCenter SSH Tunnel — Windows permanent setup
+# vCenter access from Windows (hosts + Firefox HTTPS + optional SSH tunnel)
 
-Reach **vc01.vmalpha.com** (vCenter) through **ac01** (`192.168.68.26`) from your Windows PC.
+Reach **https://vc01.vmalpha.com/** from your Windows laptop.
 
-```text
-Browser → localhost:8443 → SSH tunnel → ac01 → vc01.vmalpha.com:443
-```
+## Quick fix: Firefox HTTPS error (recommended)
 
-## One-command install (PowerShell as Administrator)
+If Firefox shows a certificate / secure connection error for `https://vc01.vmalpha.com/`, run this **as Administrator** in PowerShell:
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
-cd $env:USERPROFILE\Downloads
-git clone https://github.com/sonipl/My_first_Repo1.git
-cd My_first_Repo1\windows\vcenter-tunnel
-.\install.ps1
+cd C:\path\to\My_first_Repo1\windows\vcenter-tunnel
+
+# Direct lab / VPN access (192.168.71.20)
+.\fix-firefox-https.ps1
 ```
 
-Or if you already have the repo:
+What it does:
+
+1. Writes lab FQDN entries to `C:\Windows\System32\drivers\etc\hosts`
+2. Fetches the vCenter TLS certificate and imports it into **Windows Trusted Root**
+3. Configures Firefox to trust Windows enterprise/root CAs (`ImportEnterpriseRoots`)
+4. Flushes DNS
+
+Then **fully quit Firefox** (including tray) and open:
+
+```text
+https://vc01.vmalpha.com/
+```
+
+### Hosts entries (direct LAN — default)
+
+```text
+192.168.71.20 vc01.vmalpha.com vc01
+192.168.71.21 oelbm01.vmalpha.com oelbm01
+192.168.71.22 foreman.vmalpha.com foreman
+192.168.71.26 ac01.vmalpha.com ac01
+```
+
+### Tunnel mode (when you cannot reach 192.168.71.20 directly)
+
+```powershell
+# Map vc01 -> 127.0.0.1 and use SSH LocalForward 443
+.\fix-firefox-https.ps1 -TunnelMode
+```
+
+Requires the SSH tunnel below with `LocalForward 443`.
+
+---
+
+## Optional: permanent SSH tunnel via ac01
+
+```text
+Browser → vc01.vmalpha.com:443 → SSH LocalForward → ac01 → vc01:443
+```
+
+### One-command install (PowerShell as Administrator)
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -25,50 +62,41 @@ cd C:\path\to\My_first_Repo1\windows\vcenter-tunnel
 ```
 
 The installer will:
+
 1. Copy tunnel scripts to `C:\Tools\vcenter-tunnel\`
 2. Append SSH config to `%USERPROFILE%\.ssh\config`
-3. Optionally add `vc01.vmalpha.com` to the Windows hosts file
-4. Create a Task Scheduler job to start the tunnel at login (auto-reconnect)
+3. Update hosts + Firefox trust prefs (TunnelMode)
+4. Create a Task Scheduler job to start the tunnel at login
 
-## Manual install
-
-### 1. Copy files
+After the tunnel is up:
 
 ```powershell
-mkdir C:\Tools\vcenter-tunnel -Force
-Copy-Item start-tunnel.ps1, start-tunnel.bat C:\Tools\vcenter-tunnel\
+cd C:\Tools\vcenter-tunnel
+.\fix-firefox-https.ps1 -TunnelMode
 ```
 
-### 2. Add SSH config
-
-Append contents of `ssh-config-snippet` to `C:\Users\<YOU>\.ssh\config`
-
-### 3. Test
+### Manual tunnel test
 
 ```powershell
-ssh -N vcenter-tunnel
+ssh -N vcenter-tunnel          # https://vc01.vmalpha.com/  (port 443)
+# or
+ssh -N vcenter-tunnel-8443     # https://localhost:8443
 ```
 
-Open: **https://localhost:8443**
-
-### 4. Auto-start
-
-Run `register-scheduled-task.ps1` as Administrator.
+---
 
 ## After install
 
 | What | Value |
 |------|-------|
-| vCenter URL | https://localhost:8443 |
-| With hosts file | https://vc01.vmalpha.com |
-| Jump host | psoni@192.168.68.26 |
+| Direct URL | https://vc01.vmalpha.com/ |
+| Tunnel fallback | https://localhost:8443 |
+| Jump host | psoni@192.168.71.26 (ac01) |
 | Log file | C:\Tools\vcenter-tunnel\tunnel.log |
 | Stop tunnel | Task Scheduler → disable/end `vCenter SSH Tunnel` |
 | Start manually | `C:\Tools\vcenter-tunnel\start-tunnel.bat` |
 
 ## SSH key (recommended)
-
-Avoid password prompts on reconnect:
 
 ```powershell
 ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\id_ed25519 -N '""'
@@ -86,24 +114,35 @@ chmod 600 ~/.ssh/authorized_keys
 ## Troubleshooting
 
 ```powershell
-# Is tunnel listening?
-netstat -an | findstr ":8443"
+# Resolve + ping
+ping vc01.vmalpha.com
+nslookup vc01.vmalpha.com
 
-# View log
+# Is anything listening on 443 / 8443?
+netstat -an | findstr ":443 :8443"
+
+# View tunnel log
 Get-Content C:\Tools\vcenter-tunnel\tunnel.log -Tail 30
 
 # Test SSH to jump host
 ssh ac01
 
-# Test vCenter path from ac01
-ssh ac01 "curl -k -I https://vc01.vmalpha.com"
+# Re-run cert trust after vCenter is reachable
+.\fix-firefox-https.ps1
 ```
+
+| Firefox error | Fix |
+|---------------|-----|
+| `SEC_ERROR_UNKNOWN_ISSUER` / self-signed | Re-run `fix-firefox-https.ps1`, restart Firefox |
+| `SSL_ERROR_BAD_CERT_DOMAIN` | Cert name mismatch — use the CN/SAN on the cert, or regenerate vCenter cert |
+| `PR_END_OF_FILE_ERROR` / connection reset | Tunnel/port wrong — start tunnel or check `192.168.71.20:443` |
+| Page never loads | Hosts point to wrong IP, or tunnel not running |
 
 ## Uninstall
 
 ```powershell
 Unregister-ScheduledTask -TaskName "vCenter SSH Tunnel" -Confirm:$false
 Remove-Item -Recurse -Force C:\Tools\vcenter-tunnel
-# Remove vcenter-tunnel and ac01 blocks from %USERPROFILE%\.ssh\config manually
-# Remove 127.0.0.1 vc01.vmalpha.com from hosts file if added
+# Remove vcenter-tunnel / ac01 blocks from %USERPROFILE%\.ssh\config
+# Remove the # >>> vmalpha-lab >>> block from the hosts file
 ```

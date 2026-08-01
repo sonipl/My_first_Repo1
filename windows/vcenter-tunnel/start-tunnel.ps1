@@ -11,9 +11,19 @@ if (-not (Test-Path $SshExe)) {
     exit 1
 }
 
+# Prefer FQDN-friendly forward on 443; fall back to 8443 if binding 443 fails.
+$TunnelHost = "vcenter-tunnel"
 while ($true) {
-    Write-Log "Starting vCenter SSH tunnel (vcenter-tunnel -> vc01.vmalpha.com:443 on localhost:8443)..."
-    & $SshExe -N vcenter-tunnel 2>&1 | ForEach-Object { Write-Log $_ }
+    Write-Log "Starting vCenter SSH tunnel ($TunnelHost -> vc01.vmalpha.com:443)..."
+    & $SshExe -N $TunnelHost 2>&1 | ForEach-Object {
+        Write-Log $_
+        if ($_ -match 'Cannot assign requested address|Privilege separation user|bind|Address already in use|Permission denied') {
+            if ($TunnelHost -eq "vcenter-tunnel") {
+                Write-Log "WARN: LocalForward 443 failed; switching to vcenter-tunnel-8443"
+                $TunnelHost = "vcenter-tunnel-8443"
+            }
+        }
+    }
     Write-Log "Tunnel stopped. Reconnecting in 10 seconds..."
     Start-Sleep -Seconds 10
 }
